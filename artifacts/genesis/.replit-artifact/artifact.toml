@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Genesis — Galaxy Builder"
+version = "1.0.0"
+id = "artifacts/genesis"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19321
+
+[services.development]
+run = "pnpm --filter @workspace/genesis run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/genesis", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/genesis/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19321"
+BASE_PATH = "/"
