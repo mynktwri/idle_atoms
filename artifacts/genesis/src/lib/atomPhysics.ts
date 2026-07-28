@@ -20,8 +20,11 @@
 // PHYSICAL CONSTANTS (SI, CODATA)
 // ---------------------------------------------------------------------------
 const AMU_KG = 1.660539066e-27;    // kg, 1 atomic mass unit
-const EV_TO_J = 1.602176634e-19;   // J per eV (exact, SI 2019 definition)
+export const EV_TO_J = 1.602176634e-19;   // J per eV (exact, SI 2019 definition)
 const ELECTRON_MASS_KG = 9.1093837015e-31; // kg
+
+/** Newtonian gravitational constant, m^3 kg^-1 s^-2 (CODATA). */
+export const GRAVITATIONAL_CONSTANT = 6.6743e-11;
 
 // ---------------------------------------------------------------------------
 // HYDROGEN THRESHOLD ENERGIES
@@ -57,6 +60,13 @@ export interface Photoelectron {
 export interface CollisionResult {
   event: CollisionEvent;
   photoelectron: Photoelectron | null;
+  /**
+   * Kinetic energy (J) carried along the impact axis into this collision —
+   * i.e. the energy the collision actually had available to convert. Real,
+   * per-collision number: it scales with closing speed, so a harder impact
+   * reports more than a marginal one.
+   */
+  energyJ: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +123,71 @@ function createPhotoelectron(
 }
 
 // ---------------------------------------------------------------------------
+// K-NEAREST-NEIGHBOUR GRAVITY
+// ---------------------------------------------------------------------------
+/**
+ * Applies Newtonian gravity to every atom from its `k` nearest neighbours only
+ * (an O(n·k) approximation of the full n-body sum — the distant terms it drops
+ * are the ones the inverse square law has already made negligible).
+ *
+ *     F = G · m₁ · m₂ / r²   ⇒   a₁ = G · m₂ / r²
+ *
+ * Two knobs make this visible in a hand-sized simulation:
+ *
+ * - `gScale` multiplies G. Between two real hydrogen atoms a few pixels apart
+ *   the true force is ~1e-64 N — nothing you could ever see — so the sim runs
+ *   an amplified G, exactly like VELOCITY_SCALE amplifies the eV thresholds.
+ * - `softening` (px) is added in quadrature to r, keeping a → ∞ from blowing up
+ *   the integrator when two atoms are nearly coincident.
+ *
+ * Distances are in px and masses in kg, so the resulting acceleration is in
+ * px/sec² — the same units the sim integrates velocities in.
+ */
+export function applyNeighborGravity(
+  atoms: CollidingAtom[],
+  dt: number,
+  k: number,
+  gScale: number,
+  softening: number,
+): void {
+  const n = atoms.length;
+  if (n < 2 || k < 1) return;
+
+  const G = GRAVITATIONAL_CONSTANT * gScale;
+  const soft2 = softening * softening;
+  // Reused per atom: [squared distance, index] of the current k best neighbours
+  const near: { d2: number; j: number }[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const ai = atoms[i];
+    near.length = 0;
+
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const dx = atoms[j].x - ai.x, dy = atoms[j].y - ai.y;
+      const d2 = dx * dx + dy * dy;
+      // Insertion sort into a k-length list — cheaper than sorting all n
+      if (near.length < k) {
+        near.push({ d2, j });
+        near.sort((p, q) => p.d2 - q.d2);
+      } else if (d2 < near[k - 1].d2) {
+        near[k - 1] = { d2, j };
+        near.sort((p, q) => p.d2 - q.d2);
+      }
+    }
+
+    for (const { d2, j } of near) {
+      const bj = atoms[j];
+      const dist = Math.sqrt(d2);
+      if (dist === 0) continue; // exactly coincident — no defined direction
+      const accel = (G * bj.mass) / (d2 + soft2);
+      ai.vx += (accel * (bj.x - ai.x) / dist) * dt;
+      ai.vy += (accel * (bj.y - ai.y) / dist) * dt;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // MAIN COLLISION HANDLER — call this once per detected contact
 // ---------------------------------------------------------------------------
 /**
@@ -127,7 +202,7 @@ export function resolveCollision(
 ): CollisionResult {
   const n = impactNormal(a, b);
   const vNGame = (b.vx - a.vx) * n[0] + (b.vy - a.vy) * n[1];
-  if (vNGame >= 0) return { event: "elastic", photoelectron: null }; // separating already -- no-op
+  if (vNGame >= 0) return { event: "elastic", photoelectron: null, energyJ: 0 }; // separating already -- no-op
 
   const vNMps = vNGame * VELOCITY_SCALE;
   const mu = reducedMass(a, b);
@@ -153,7 +228,7 @@ export function resolveCollision(
     // treated as negligible back-reaction on A/B.
     a.ionized = true;
     const photoelectron = createPhotoelectron(EConvJ, ionizationWeight, a.x, a.y, n);
-    return { event, photoelectron };
+    return { event, photoelectron, energyJ: EConvJ };
   }
-  return { event, photoelectron: null };
+  return { event, photoelectron: null, energyJ: EConvJ };
 }
