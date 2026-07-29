@@ -2,28 +2,35 @@ import { BUILDINGS } from "../config/buildings";
 import { UPGRADES } from "../config/upgrades";
 import { GameState } from "../hooks/useGameState";
 
+/**
+ * Lifetime energy (eV) that must be earned per point of Cosmic Dust.
+ * Dust = floor(sqrt(lifetimeEnergy / this)), so the first point lands at 4 MeV.
+ */
+export const DUST_ENERGY_DIVISOR = 4_000_000;
+
 export function getBuildingCost(buildingId: string, owned: number): number {
   const building = BUILDINGS.find(b => b.id === buildingId);
   if (!building) return Infinity;
   return building.baseCost * Math.pow(building.costScaling, owned);
 }
 
+/** All energy quantities here are in eV — see lib/energyUnits.ts. */
 export function computeRates(state: GameState) {
-  let jouleDelta = 0;
+  let energyDelta = 0;
   let matterDelta = 0;
 
   // Compute base rates from buildings
   BUILDINGS.forEach(building => {
     const count = state.buildings[building.id] || 0;
     if (count > 0) {
-      let bJouleOutput = building.baseOutput * count;
+      let bEnergyOutput = building.baseOutput * count;
       let bMatterOutput = (building.matterOutput || 0) * count;
 
       // Apply upgrades for this building
       UPGRADES.forEach(upg => {
         if (state.upgrades.has(upg.id)) {
           if (upg.targetBuilding === building.id && upg.multiplier) {
-            bJouleOutput *= upg.multiplier;
+            bEnergyOutput *= upg.multiplier;
           }
           if (upg.targetBuilding === `${building.id}-matter` && upg.multiplier) {
             bMatterOutput *= upg.multiplier;
@@ -31,7 +38,7 @@ export function computeRates(state: GameState) {
         }
       });
 
-      jouleDelta += bJouleOutput;
+      energyDelta += bEnergyOutput;
       matterDelta += bMatterOutput;
     }
   });
@@ -43,17 +50,17 @@ export function computeRates(state: GameState) {
 
   // Add passive clicks if upgraded
   if (state.upgrades.has("auto-collide-1")) {
-    jouleDelta += clickPower; // +1 click per second
+    energyDelta += clickPower; // +1 eV/sec per click power
   }
 
   // Apply prestige multiplier
-  jouleDelta *= state.prestigeMultiplier;
+  energyDelta *= state.prestigeMultiplier;
   matterDelta *= state.prestigeMultiplier;
   clickPower *= state.prestigeMultiplier;
 
-  return { jouleDelta, matterDelta, clickPower };
+  return { energyDelta, matterDelta, clickPower };
 }
 
-export function calculateCosmicDust(lifetimeJoules: number): number {
-  return Math.floor(Math.sqrt(lifetimeJoules / 1000000));
+export function calculateCosmicDust(lifetimeEnergy: number): number {
+  return Math.floor(Math.sqrt(lifetimeEnergy / DUST_ENERGY_DIVISOR));
 }

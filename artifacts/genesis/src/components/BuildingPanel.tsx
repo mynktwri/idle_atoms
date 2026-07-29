@@ -2,6 +2,7 @@ import { BUILDINGS } from "../config/buildings";
 import { useGameState } from "../hooks/useGameState";
 import { getBuildingCost } from "../lib/gameLogic";
 import { formatNumber } from "../lib/formatNumber";
+import { formatEnergy, formatEnergyRate } from "../lib/energyUnits";
 
 export function BuildingPanel() {
   const state = useGameState();
@@ -12,7 +13,7 @@ export function BuildingPanel() {
         const isUnlocked = state.tier >= b.unlockTier;
         const count = state.buildings[b.id] || 0;
         const cost = getBuildingCost(b.id, count);
-        const canAfford = state.joules >= cost;
+        const canAfford = state.energy >= cost;
 
         if (!isUnlocked && count === 0) {
           return (
@@ -38,7 +39,7 @@ export function BuildingPanel() {
             <div className="flex justify-between items-end mt-4">
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase font-mono text-muted-foreground">Output</span>
-                <span className="text-xs font-mono">+{formatNumber(b.baseOutput)} J/s</span>
+                <span className="text-xs font-mono">+{formatEnergyRate(b.baseOutput)}</span>
                 {b.matterOutput && (
                   <span className="text-xs font-mono text-secondary mt-0.5">+{formatNumber(b.matterOutput)} M/s</span>
                 )}
@@ -54,7 +55,7 @@ export function BuildingPanel() {
                     : 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
                 }`}
               >
-                {formatNumber(cost)} J
+                {formatEnergy(cost)}
               </button>
             </div>
           </div>

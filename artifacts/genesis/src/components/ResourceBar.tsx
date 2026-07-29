@@ -1,5 +1,6 @@
 import { useGameState } from "../hooks/useGameState";
 import { formatNumber } from "../lib/formatNumber";
+import { formatEnergy, formatEnergyRate } from "../lib/energyUnits";
 import { computeRates } from "../lib/gameLogic";
 
 export function ResourceBar() {
@@ -10,12 +11,12 @@ export function ResourceBar() {
     <div className="w-full flex flex-col gap-2 p-6 border-b border-border/50 bg-card/30 backdrop-blur-sm">
       <div className="flex justify-between items-start">
         <div className="flex flex-col">
-          <span className="text-sm font-mono text-muted-foreground uppercase tracking-widest">Joules</span>
+          <span className="text-sm font-mono text-muted-foreground uppercase tracking-widest">Energy</span>
           <div className="text-4xl font-mono font-bold tracking-tight text-primary drop-shadow-[0_0_8px_rgba(138,43,226,0.5)]">
-            {formatNumber(state.joules)}
+            {formatEnergy(state.energy)}
           </div>
           <span className="text-xs font-mono text-muted-foreground mt-1">
-            +{formatNumber(rates.jouleDelta)} / sec
+            +{formatEnergyRate(rates.energyDelta)}
           </span>
         </div>
 

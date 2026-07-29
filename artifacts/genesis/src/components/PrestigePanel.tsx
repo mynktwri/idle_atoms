@@ -1,6 +1,7 @@
 import { useGameState } from "../hooks/useGameState";
-import { calculateCosmicDust } from "../lib/gameLogic";
+import { calculateCosmicDust, DUST_ENERGY_DIVISOR } from "../lib/gameLogic";
 import { formatNumber } from "../lib/formatNumber";
+import { formatEnergy } from "../lib/energyUnits";
 import { motion } from "framer-motion";
 import { useState } from "react";
 
@@ -8,7 +9,7 @@ export function PrestigePanel() {
   const state = useGameState();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const potentialDust = calculateCosmicDust(state.lifetimeJoules);
+  const potentialDust = calculateCosmicDust(state.lifetimeEnergy);
   const isEligible = state.tier >= 5;
   const canPrestige = isEligible && potentialDust >= 1;
 
@@ -22,7 +23,7 @@ export function PrestigePanel() {
       <div className="mb-8 text-center space-y-2">
         <h2 className="text-2xl font-light tracking-widest text-accent">THE BIG CRUNCH</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Collapse your universe into a singularity. All Joules, Matter, Buildings, and Upgrades will be destroyed.<br/>
+          Collapse your universe into a singularity. All Energy, Matter, Buildings, and Upgrades will be destroyed.<br/>
           You will be reborn with Cosmic Dust.
         </p>
       </div>
@@ -53,7 +54,7 @@ export function PrestigePanel() {
         ) : !canPrestige ? (
           <p className="text-xs text-muted-foreground text-center font-mono">
             Requires at least 1 Cosmic Dust potential.<br/>
-            (Reach {formatNumber(1000000)} lifetime Joules)
+            (Reach {formatEnergy(DUST_ENERGY_DIVISOR)} lifetime energy)
           </p>
         ) : confirmOpen ? (
           <div className="flex flex-col gap-3 w-full max-w-xs">

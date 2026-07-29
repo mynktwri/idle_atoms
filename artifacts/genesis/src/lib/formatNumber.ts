@@ -1,4 +1,9 @@
 export function formatNumber(num: number): string {
+  // Fractional trickles (a Fusion Chamber's 0.01 matter/sec) would floor to "0"
+  // at 1 decimal, so small values keep enough places to stay visible.
+  if (num > 0 && num < 1) {
+    return parseFloat(num.toPrecision(2)).toString();
+  }
   if (num < 1000) {
     return (Math.floor(num * 10) / 10).toString(); // Keep 1 decimal for small resources if needed
   }

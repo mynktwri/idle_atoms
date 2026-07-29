@@ -4,8 +4,9 @@ import { useGameState } from "../hooks/useGameState";
 import { onSpawnAtom } from "../lib/atomSpawner";
 import {
   resolveCollision, applyNeighborGravity,
-  HYDROGEN_MASS_KG, EV_TO_J, type Photoelectron,
+  HYDROGEN_MASS_KG, type Photoelectron,
 } from "../lib/atomPhysics";
+import { joulesToEv } from "../lib/energyUnits";
 
 // ─── window dimensions — adjust these freely ─────────────────────────────────
 const WINDOW_WIDTH   = 560;   // px
@@ -33,11 +34,12 @@ const GRAVITY_NEIGHBORS = 3;
 const GRAVITY_SCALE     = 1e42;  // lower = looser drift, higher = faster collapse
 const GRAVITY_SOFTENING = 4;     // px — damps the 1/r² singularity at contact
 
-// ── TUNING: joules awarded per reaction ─────────────────────────────────────
+// ── TUNING: energy awarded per reaction, in eV ──────────────────────────────
+// eV is the game's base unit, so these are added to the tracker as-is.
 // Excitation pays a flat quantum; ionization pays that plus the collision's
-// own converted energy, so harder impacts are worth more.
-const EXCITE_REWARD_EV = 0.1;
-const IONIZE_REWARD_EV = 0.1;
+// own converted energy (13.6 eV and up), so harder impacts are worth more.
+const EXCITE_REWARD_EV = 1;
+const IONIZE_REWARD_EV = 5;
 
 // Photoelectron spark brightness multiplier (40% brighter than the original spark)
 const SPARK_BRIGHTNESS = 1.4;
@@ -125,8 +127,8 @@ interface CollisionEffects {
   photoelectrons: Photoelectron[];
   /** Indices (ascending) of atoms whose life timer ran out this frame. */
   expired: number[];
-  /** Joules earned by this frame's reactions. */
-  joules: number;
+  /** Energy (eV) earned by this frame's reactions. */
+  energy: number;
 }
 
 /**
@@ -135,7 +137,7 @@ interface CollisionEffects {
  * through the elastic/excitation/ionization threshold model — most impacts stay
  * elastic, but fast enough closing speeds (typically atoms that have fallen
  * into a gravity well) shave off a quantum of energy and, above the ionization
- * threshold, spawn a photoelectron. Reactions are what pay out joules.
+ * threshold, spawn a photoelectron. Reactions are what pay out energy.
  *
  * Life timers are decremented here too; atoms that hit zero are reported in
  * `effects.expired` (by index) for the renderer to tear down — this function
@@ -143,7 +145,7 @@ interface CollisionEffects {
  */
 function stepPhysics(atoms: Atom[], hw: number, hh: number, dt: number): CollisionEffects {
   const R = ATOM_RADIUS;
-  const effects: CollisionEffects = { excites: [], ionizes: [], photoelectrons: [], expired: [], joules: 0 };
+  const effects: CollisionEffects = { excites: [], ionizes: [], photoelectrons: [], expired: [], energy: 0 };
 
   // Mutual attraction from each atom's k nearest neighbours, applied to
   // velocity before the positions are integrated
@@ -183,13 +185,13 @@ function stepPhysics(atoms: Atom[], hw: number, hh: number, dt: number): Collisi
       const mx = (ai.x + aj.x) / 2, my = (ai.y + aj.y) / 2;
       if (event === "excite") {
         effects.excites.push({ x: mx, y: my });
-        effects.joules += EXCITE_REWARD_EV * EV_TO_J;
+        effects.energy += EXCITE_REWARD_EV;
       }
       if (event === "ionize") {
         // resolveCollision attributes the ionization to the first atom
         ai.flashT = IONIZE_FADE_SEC;
         effects.ionizes.push({ x: mx, y: my });
-        effects.joules += IONIZE_REWARD_EV * EV_TO_J + energyJ;
+        effects.energy += IONIZE_REWARD_EV + joulesToEv(energyJ);
         if (photoelectron) effects.photoelectrons.push(photoelectron);
       }
     }
@@ -410,8 +412,8 @@ export function ReactionWindow() {
           }
         });
 
-        // Reaction payout — excitation/ionization are the only joule sources
-        if (effects.joules > 0) stateRef.current.addJoules(effects.joules);
+        // Reaction payout — excitation/ionization are the only energy sources
+        if (effects.energy > 0) stateRef.current.addEnergy(effects.energy);
 
         // Life timers that ran out: same burst as an ionization, then despawn
         for (let k = effects.expired.length - 1; k >= 0; k--) {
@@ -540,8 +542,8 @@ export function ReactionWindow() {
         }
       };
 
-      // Reaction payout — excitation/ionization are the only joule sources
-      if (effects.joules > 0) stateRef.current.addJoules(effects.joules);
+      // Reaction payout — excitation/ionization are the only energy sources
+      if (effects.energy > 0) stateRef.current.addEnergy(effects.energy);
 
       // Life timers that ran out: same burst as an ionization, then despawn
       for (let k = effects.expired.length - 1; k >= 0; k--) {

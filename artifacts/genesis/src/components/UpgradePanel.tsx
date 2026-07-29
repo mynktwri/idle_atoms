@@ -1,6 +1,6 @@
 import { UPGRADES } from "../config/upgrades";
 import { useGameState } from "../hooks/useGameState";
-import { formatNumber } from "../lib/formatNumber";
+import { formatEnergy } from "../lib/energyUnits";
 
 export function UpgradePanel() {
   const state = useGameState();
@@ -23,7 +23,7 @@ export function UpgradePanel() {
       )}
 
       {visibleUpgrades.map(u => {
-        const canAfford = state.joules >= u.cost;
+        const canAfford = state.energy >= u.cost;
         return (
           <div key={u.id} className={`p-4 rounded-lg border ${canAfford ? 'border-accent/40 bg-accent/5' : 'border-border/50 bg-card/50 opacity-80'}`}>
             <div className="flex justify-between items-start mb-2">
@@ -43,7 +43,7 @@ export function UpgradePanel() {
                     : 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
                 }`}
               >
-                {formatNumber(u.cost)} J
+                {formatEnergy(u.cost)}
               </button>
             </div>
           </div>

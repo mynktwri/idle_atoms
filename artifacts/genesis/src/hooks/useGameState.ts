@@ -4,32 +4,37 @@ import { getBuildingCost, computeRates, calculateCosmicDust } from "../lib/gameL
 import { UPGRADES } from "../config/upgrades";
 import { TIERS } from "../config/tiers";
 
+/**
+ * All energy in this store is measured in **electronvolts (eV)** — the scale a
+ * single atomic reaction pays out at. See lib/energyUnits.ts for the sliding
+ * unit scale used to display it (eV → keV → MeV → … → J → kJ …).
+ */
 export interface GameState {
-  joules: number;
+  energy: number;          // eV
   matter: number;
   stardust: number; // Cosmic Dust
-  lifetimeJoules: number;
+  lifetimeEnergy: number;  // eV
   buildings: Record<string, number>;
   upgrades: Set<string>;
   tier: number;
   prestigeMultiplier: number;
-  clickPower: number; // computed, but stored for ease
+  clickPower: number;      // eV per click, computed, but stored for ease
 
   // Actions
-  addJoules: (amount: number, isClick?: boolean) => void;
+  addEnergy: (amount: number, isClick?: boolean) => void;
   addMatter: (amount: number) => void;
   buyBuilding: (id: string) => void;
   buyUpgrade: (id: string) => void;
   prestige: () => void;
   resetSave: () => void;
-  tick: (jouleDelta: number, matterDelta: number) => void;
+  tick: (energyDelta: number, matterDelta: number) => void;
 }
 
 const initialState = {
-  joules: 0,
+  energy: 0,
   matter: 0,
   stardust: 0,
-  lifetimeJoules: 0,
+  lifetimeEnergy: 0,
   buildings: {},
   upgrades: new Set<string>(),
   tier: 1,
@@ -37,26 +42,45 @@ const initialState = {
   clickPower: 1,
 };
 
+/**
+ * Bring a persisted save onto the current schema.
+ *
+ * v1 stored `joules` / `lifetimeJoules`. The economy is now denominated in eV
+ * on the same numeric ladder — building costs and tier requirements kept their
+ * magnitudes — so the stored amounts carry over 1:1 and only the field names
+ * and the displayed unit change.
+ */
+function migrateSave(persisted: any): any {
+  if (!persisted) return persisted;
+  const { joules, lifetimeJoules, ...rest } = persisted;
+  if (joules === undefined && lifetimeJoules === undefined) return persisted;
+  return {
+    ...rest,
+    energy: rest.energy ?? joules ?? 0,
+    lifetimeEnergy: rest.lifetimeEnergy ?? lifetimeJoules ?? 0,
+  };
+}
+
 export const useGameState = create<GameState>()(
   persist(
     (set, get) => ({
       ...initialState,
 
-      addJoules: (amount: number, isClick = false) => {
+      addEnergy: (amount: number, isClick = false) => {
         set((state) => {
-          const newJoules = state.joules + amount;
-          const newLifetime = state.lifetimeJoules + amount;
+          const newEnergy = state.energy + amount;
+          const newLifetime = state.lifetimeEnergy + amount;
           
           let newTier = state.tier;
           TIERS.forEach(t => {
-            if (newLifetime >= t.lifetimeJoulesReq && t.level > newTier) {
+            if (newLifetime >= t.lifetimeEnergyReq && t.level > newTier) {
               newTier = t.level;
             }
           });
 
           return {
-            joules: newJoules,
-            lifetimeJoules: newLifetime,
+            energy: newEnergy,
+            lifetimeEnergy: newLifetime,
             tier: newTier
           };
         });
@@ -66,22 +90,22 @@ export const useGameState = create<GameState>()(
         set((state) => ({ matter: state.matter + amount }));
       },
 
-      tick: (jouleDelta: number, matterDelta: number) => {
+      tick: (energyDelta: number, matterDelta: number) => {
         set((state) => {
-          const newJoules = state.joules + (jouleDelta * 0.2);
-          const newLifetime = state.lifetimeJoules + (jouleDelta * 0.2);
+          const newEnergy = state.energy + (energyDelta * 0.2);
+          const newLifetime = state.lifetimeEnergy + (energyDelta * 0.2);
           const newMatter = state.matter + (matterDelta * 0.2);
           
           let newTier = state.tier;
           TIERS.forEach(t => {
-            if (newLifetime >= t.lifetimeJoulesReq && t.level > newTier) {
+            if (newLifetime >= t.lifetimeEnergyReq && t.level > newTier) {
               newTier = t.level;
             }
           });
 
           return {
-            joules: newJoules,
-            lifetimeJoules: newLifetime,
+            energy: newEnergy,
+            lifetimeEnergy: newLifetime,
             matter: newMatter,
             tier: newTier
           };
@@ -93,9 +117,9 @@ export const useGameState = create<GameState>()(
         const count = state.buildings[id] || 0;
         const cost = getBuildingCost(id, count);
 
-        if (state.joules >= cost) {
+        if (state.energy >= cost) {
           set((s) => ({
-            joules: s.joules - cost,
+            energy: s.energy - cost,
             buildings: { ...s.buildings, [id]: count + 1 }
           }));
         }
@@ -105,11 +129,11 @@ export const useGameState = create<GameState>()(
         const state = get();
         const upg = UPGRADES.find(u => u.id === id);
         
-        if (upg && state.joules >= upg.cost && !state.upgrades.has(id)) {
+        if (upg && state.energy >= upg.cost && !state.upgrades.has(id)) {
           const newUpgrades = new Set(state.upgrades);
           newUpgrades.add(id);
           set((s) => ({
-            joules: s.joules - upg.cost,
+            energy: s.energy - upg.cost,
             upgrades: newUpgrades
           }));
         }
@@ -117,7 +141,7 @@ export const useGameState = create<GameState>()(
 
       prestige: () => {
         const state = get();
-        const earnedDust = calculateCosmicDust(state.lifetimeJoules);
+        const earnedDust = calculateCosmicDust(state.lifetimeEnergy);
         
         if (state.tier >= 5 && earnedDust >= 1) {
           const newStardust = state.stardust + earnedDust;
@@ -141,16 +165,24 @@ export const useGameState = create<GameState>()(
     {
       name: "genesis_save",
       storage: createJSONStorage(() => localStorage),
+      version: 2,
       // Need to handle Map/Set serialization
       partialize: (state) => ({
         ...state,
         upgrades: Array.from(state.upgrades),
       }),
-      merge: (persistedState: any, currentState) => ({
-        ...currentState,
-        ...persistedState,
-        upgrades: new Set(persistedState.upgrades || []),
-      })
+      // The rename happens here rather than in `migrate`: pre-v2 saves were
+      // written before this store declared a `version`, and zustand only runs
+      // `migrate` when the stored version is a number — so those saves would
+      // slip past it entirely. `merge` runs on every hydration.
+      merge: (persistedState: any, currentState) => {
+        const persisted = migrateSave(persistedState);
+        return {
+          ...currentState,
+          ...persisted,
+          upgrades: new Set(persisted.upgrades || []),
+        };
+      }
     }
   )
 );

@@ -9,7 +9,7 @@ export function useGameLoop() {
   useEffect(() => {
     const interval = setInterval(() => {
       const rates = computeRates(state);
-      state.tick(rates.jouleDelta, rates.matterDelta);
+      state.tick(rates.energyDelta, rates.matterDelta);
     }, 200);
 
     return () => clearInterval(interval);
