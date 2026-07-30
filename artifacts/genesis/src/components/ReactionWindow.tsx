@@ -55,14 +55,14 @@ interface DebrisSpec {
 
 const EXCITE_DEBRIS: DebrisSpec = {
   countMin: 5, countMax: 8,
-  radiusMin: 2, radiusMax: 5,
+  radiusMin: 1, radiusMax: 3,
   lifeMinMs: 400, lifeMaxMs: 800,
   hex: 0xffcc33, rgb: "255,204,51",       // gold
 };
 
 const IONIZE_DEBRIS: DebrisSpec = {
   countMin: 8, countMax: 12,
-  radiusMin: 4, radiusMax: 8,
+  radiusMin: 2, radiusMax: 4,
   lifeMinMs: 600, lifeMaxMs: 1000,
   hex: 0xffffff, rgb: "255,255,255",      // white
 };
@@ -101,7 +101,7 @@ interface Atom {
 /** One atom at (x, y) with a random heading and a randomised lifetime. */
 function makeAtom(x: number, y: number): Atom {
   const angle = Math.random() * Math.PI * 2;
-  const speed = INIT_SPEED * (0.4 + Math.random() * 0.8);
+  const speed = 0.1 * INIT_SPEED;
   return {
     x, y,
     vx: Math.cos(angle) * speed,
